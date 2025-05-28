@@ -5,7 +5,15 @@ const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
-app.use(cors());
+
+// Configure CORS to specifically allow your Vercel frontend's origin
+// This is crucial for cross-origin requests from your deployed app.
+app.use(cors({
+  origin: 'https://cipher-and-phantom.vercel.app', // Allow only your Vercel frontend
+  methods: ['GET', 'POST'], // Allow only the HTTP methods your frontend will use
+  allowedHeaders: ['Content-Type'], // Allow only specific headers your frontend might send
+}));
+
 app.use(express.json());
 
 // Enhanced prompts with clearer directives and persona examples
@@ -40,13 +48,12 @@ const prompts = {
 };
 
 app.post('/api/chat', async (req, res) => {
-  const { message, mode, history = [] } = req.body; // Expecting history as an array of { role: 'user'/'model', parts: [{ text: '...' }] }
+  const { message, mode, history = [] } = req.body;
   const systemPrompt = prompts[mode] || prompts.blue;
 
-  // Format chat history for the Gemini API
   const conversationHistory = history.map(entry => ({
     role: entry.role,
-    parts: [{ text: entry.parts[0].text }] // Assuming 'parts' contains an array with a text object
+    parts: [{ text: entry.parts[0].text }]
   }));
 
   try {
@@ -55,12 +62,12 @@ app.post('/api/chat', async (req, res) => {
       {
         contents: [
           {
-            role: 'user', // System prompt is now treated as a user message at the beginning of the chat
+            role: 'user',
             parts: [{ text: systemPrompt }]
           },
-          ...conversationHistory, // Include previous messages
+          ...conversationHistory,
           {
-            role: 'user', // The new user message
+            role: 'user',
             parts: [{ text: message }]
           }
         ]
