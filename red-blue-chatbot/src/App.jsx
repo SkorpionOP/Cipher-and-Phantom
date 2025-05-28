@@ -62,7 +62,7 @@ export default function App() {
         parts: [{ text: msg.text }]
       }));
 
-      const response = await axios.post('http://localhost:3001/api/chat', {
+      const response = await axios.post('https://cipher-and-phantom.onrender.com/api/chat', {
         message: input,
         mode: mode,
         history: chatHistoryForBackend
