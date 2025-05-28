@@ -2,6 +2,19 @@ import { useState, useEffect, useRef } from 'react';
 import { Send, Zap, Bot, User, Sparkles, Flame } from 'lucide-react';
 import axios from 'axios';
 
+// Simple markdown renderer for bot messages
+const renderMarkdown = (text) => {
+  // Convert **bold** to <strong>
+  let rendered = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  // Convert *italic* to <em>
+  rendered = rendered.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  // Convert `code` to <code>
+  rendered = rendered.replace(/`(.*?)`/g, '<code class="bg-white/20 px-1 rounded text-sm">$1</code>');
+  // Convert line breaks to <br>
+  rendered = rendered.replace(/\n/g, '<br>');
+  return rendered;
+};
+
 export default function App() {
   const [mode, setMode] = useState('blue');
   const [input, setInput] = useState('');
@@ -9,6 +22,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null); // Ref for textarea
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -54,6 +68,10 @@ export default function App() {
 
     setMessages(prev => [...prev, userMessage]);
     setInput('');
+    // Reset textarea height after sending message
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
     setLoading(true);
 
     try {
@@ -63,7 +81,7 @@ export default function App() {
       }));
 
       const response = await axios.post('https://cipher-and-phantom.onrender.com/api/chat', {
-        message: input,
+        message: userMessage.text, // Use the userMessage text directly
         mode: mode,
         history: chatHistoryForBackend
       });
@@ -81,6 +99,12 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Auto-resize textarea function
+  const handleTextareaResize = (e) => {
+    e.target.style.height = 'auto'; // Reset height
+    e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px'; // Max height 128px (4 lines approx)
   };
 
   const isBlue = mode === 'blue';
@@ -182,7 +206,14 @@ export default function App() {
                         ? 'bg-blue-500/10 border-blue-500/20 text-blue-100'
                         : 'bg-red-500/10 border-red-500/20 text-red-100'
                   }`}>
-                    <p className="leading-relaxed">{msg.text}</p>
+                    {msg.sender === 'bot' ? (
+                      <div
+                        className="leading-relaxed"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
+                      />
+                    ) : (
+                      <p className="leading-relaxed">{msg.text}</p> // User messages don't need markdown rendering unless you intend to style them too
+                    )}
                   </div>
                 </div>
               </div>
@@ -231,20 +262,30 @@ export default function App() {
         {/* Input area */}
         <footer className="fixed bottom-0 left-0 right-0 backdrop-blur-xl bg-white/5 border-t border-white/10 p-4">
           <div className="max-w-4xl mx-auto">
-            <div className="flex gap-3">
+            <div className="flex gap-3 items-end"> {/* Use items-end to align button and textarea properly */}
               <div className="flex-1 relative">
-                <input
-                  className={`w-full p-3 rounded-2xl backdrop-blur-xl bg-white/10 border border-white/20
-                    text-white placeholder-gray-400 outline-none ${
+                <textarea
+                  ref={textareaRef} // Assign ref to textarea
+                  rows="1" // Start with 1 row
+                  className={`w-full p-3 pr-8 rounded-2xl backdrop-blur-xl bg-white/10 border border-white/20
+                    text-white placeholder-gray-400 outline-none resize-none overflow-hidden max-h-32 ${ // Added resize-none and overflow-hidden
                       isBlue ? 'focus:border-blue-500/50' : 'focus:border-red-500/50'
                     }`}
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    handleTextareaResize(e); // Call resize handler on change
+                  }}
                   placeholder="Enter your message to the neural network..."
                   disabled={loading}
-                  onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-                />
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) { // Send on Enter, allow Shift+Enter for new line
+                      e.preventDefault(); // Prevent default new line behavior
+                      sendMessage();
+                    }
+                  }}
+                ></textarea> {/* Use textarea instead of input */}
+                <div className="absolute right-3 bottom-3"> {/* Adjusted position for Sparkles */}
                   <Sparkles className={`w-4 h-4 ${
                     isBlue ? 'text-cyan-400' : 'text-red-400'
                   } ${input ? 'animate-pulse' : ''}`} />
@@ -267,7 +308,8 @@ export default function App() {
         </footer>
       </div>
 
-      <style jsx global>{`
+      {/* Global CSS for animations (if not in a separate CSS file) */}
+      <style>{`
         @keyframes fadeIn {
           from {
             opacity: 0;
