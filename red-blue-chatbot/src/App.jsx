@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Zap, Bot, User, Sparkles, Flame } from 'lucide-react';
+import { Send, Zap, Bot, User, Sparkles, Flame, Info } from 'lucide-react'; // Import Info icon
 import axios from 'axios';
 
 // Simple markdown renderer for bot messages
@@ -21,6 +21,7 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [showDisclaimer, setShowDisclaimer] = useState(false); // New state for disclaimer
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null); // Ref for textarea
 
@@ -28,12 +29,19 @@ export default function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Set initial welcome message based on mode and check disclaimer status
   useEffect(() => {
     setMessages([{
       sender: 'bot',
       text: `Welcome to the nexus. I'm ${mode === 'blue' ? 'Cipher' : 'Phantom'}, your AI companion. What reality shall we explore today?`,
       timestamp: Date.now()
     }]);
+
+    // Check if disclaimer has been seen before
+    const disclaimerSeen = localStorage.getItem('gemini_disclaimer_seen');
+    if (!disclaimerSeen) {
+      setShowDisclaimer(true);
+    }
   }, [mode]);
 
   useEffect(() => {
@@ -68,7 +76,6 @@ export default function App() {
 
     setMessages(prev => [...prev, userMessage]);
     setInput('');
-    // Reset textarea height after sending message
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
@@ -81,7 +88,7 @@ export default function App() {
       }));
 
       const response = await axios.post('https://cipher-and-phantom.onrender.com/api/chat', {
-        message: userMessage.text, // Use the userMessage text directly
+        message: userMessage.text,
         mode: mode,
         history: chatHistoryForBackend
       });
@@ -101,10 +108,14 @@ export default function App() {
     }
   };
 
-  // Auto-resize textarea function
   const handleTextareaResize = (e) => {
-    e.target.style.height = 'auto'; // Reset height
-    e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px'; // Max height 128px (4 lines approx)
+    e.target.style.height = 'auto';
+    e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px';
+  };
+
+  const handleDismissDisclaimer = () => {
+    setShowDisclaimer(false);
+    localStorage.setItem('gemini_disclaimer_seen', 'true');
   };
 
   const isBlue = mode === 'blue';
@@ -164,6 +175,37 @@ export default function App() {
           </div>
         </header>
 
+        {/* Disclaimer Modal/Banner */}
+        {showDisclaimer && (
+          <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+            <div className={`bg-white/10 backdrop-blur-xl rounded-lg p-6 max-w-md w-full text-white shadow-2xl border ${
+              isBlue ? 'border-blue-400/30' : 'border-red-400/30'
+            }`}>
+              <div className="flex items-center mb-4">
+                <Info className={`mr-3 ${isBlue ? 'text-blue-300' : 'text-red-300'}`} size={24} />
+                <h2 className="text-xl font-bold">Important Information</h2>
+              </div>
+              <p className="text-gray-200 mb-6 leading-relaxed">
+                This AI model is trained on a massive dataset of text and code,
+                but its knowledge cutoff is **early 2023**. Therefore, it may not have
+                information about recent events or developments. For critical or
+                time-sensitive tasks, please rely on up-to-date sources like
+                Google Search or other verified platforms.
+              </p>
+              <button
+                onClick={handleDismissDisclaimer}
+                className={`w-full py-2 rounded-lg font-semibold transition-all ${
+                  isBlue
+                    ? 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700'
+                    : 'bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700'
+                } text-white`}
+              >
+                Got It!
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Chat messages */}
         <main className="flex-1 overflow-y-auto p-4 pb-20">
           <div className="max-w-4xl mx-auto space-y-4">
@@ -212,7 +254,7 @@ export default function App() {
                         dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
                       />
                     ) : (
-                      <p className="leading-relaxed">{msg.text}</p> // User messages don't need markdown rendering unless you intend to style them too
+                      <p className="leading-relaxed">{msg.text}</p>
                     )}
                   </div>
                 </div>
@@ -262,30 +304,30 @@ export default function App() {
         {/* Input area */}
         <footer className="fixed bottom-0 left-0 right-0 backdrop-blur-xl bg-white/5 border-t border-white/10 p-4">
           <div className="max-w-4xl mx-auto">
-            <div className="flex gap-3 items-end"> {/* Use items-end to align button and textarea properly */}
+            <div className="flex gap-3 items-end">
               <div className="flex-1 relative">
                 <textarea
-                  ref={textareaRef} // Assign ref to textarea
-                  rows="1" // Start with 1 row
+                  ref={textareaRef}
+                  rows="1"
                   className={`w-full p-3 pr-8 rounded-2xl backdrop-blur-xl bg-white/10 border border-white/20
-                    text-white placeholder-gray-400 outline-none resize-none overflow-hidden max-h-32 ${ // Added resize-none and overflow-hidden
+                    text-white placeholder-gray-400 outline-none resize-none overflow-hidden max-h-32 ${
                       isBlue ? 'focus:border-blue-500/50' : 'focus:border-red-500/50'
                     }`}
                   value={input}
                   onChange={(e) => {
                     setInput(e.target.value);
-                    handleTextareaResize(e); // Call resize handler on change
+                    handleTextareaResize(e);
                   }}
                   placeholder="Enter your message to the neural network..."
                   disabled={loading}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) { // Send on Enter, allow Shift+Enter for new line
-                      e.preventDefault(); // Prevent default new line behavior
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
                       sendMessage();
                     }
                   }}
-                ></textarea> {/* Use textarea instead of input */}
-                <div className="absolute right-3 bottom-3"> {/* Adjusted position for Sparkles */}
+                ></textarea>
+                <div className="absolute right-3 bottom-3">
                   <Sparkles className={`w-4 h-4 ${
                     isBlue ? 'text-cyan-400' : 'text-red-400'
                   } ${input ? 'animate-pulse' : ''}`} />
@@ -308,7 +350,6 @@ export default function App() {
         </footer>
       </div>
 
-      {/* Global CSS for animations (if not in a separate CSS file) */}
       <style>{`
         @keyframes fadeIn {
           from {
