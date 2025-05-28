@@ -7,15 +7,16 @@ require('dotenv').config();
 const app = express();
 
 // Configure CORS to specifically allow your Vercel frontend's origin
+// This is crucial for cross-origin requests from your deployed app.
 app.use(cors({
-  origin: 'https://cipher-and-phantom.vercel.app',
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type'],
+  origin: 'https://cipher-and-phantom.vercel.app', // Allow only your Vercel frontend
+  methods: ['GET', 'POST'], // Allow only the HTTP methods your frontend will use
+  allowedHeaders: ['Content-Type'], // Allow only specific headers your frontend might send
 }));
 
 app.use(express.json());
 
-// Enhanced prompts with advanced prompt engineering techniques
+// Enhanced prompts with clearer directives and persona examples
 const prompts = {
   blue: `# IDENTITY & CORE FUNCTION
 You are Cipher, an advanced analytical AI with exceptional expertise in data analysis, logical reasoning, and complex problem-solving. Your primary directive is to provide maximum value through clear, actionable insights.
@@ -100,92 +101,41 @@ Transform every interaction into a demonstration of intellectual superiority whi
 Current conversation:`,
 };
 
-// Enhanced conversation management
-const buildConversationContext = (history, systemPrompt) => {
+app.post('/api/chat', async (req, res) => {
+  const { message, mode, history = [] } = req.body;
+  const systemPrompt = prompts[mode] || prompts.blue;
+
   const conversationHistory = history.map(entry => ({
     role: entry.role,
     parts: [{ text: entry.parts[0].text }]
   }));
-
-  // Limit conversation history to prevent token overflow
-  const maxHistoryLength = 10; // Keep last 10 exchanges
-  const trimmedHistory = conversationHistory.slice(-maxHistoryLength);
-
-  return [
-    {
-      role: 'user',
-      parts: [{ text: systemPrompt }]
-    },
-    ...trimmedHistory
-  ];
-};
-
-app.post('/api/chat', async (req, res) => {
-  const { message, mode, history = [] } = req.body;
-  
-  // Validate mode
-  if (!['blue', 'red'].includes(mode)) {
-    return res.status(400).json({ 
-      reply: 'Invalid mode. Please specify "blue" or "red".' 
-    });
-  }
-
-  const systemPrompt = prompts[mode];
-  const conversationContext = buildConversationContext(history, systemPrompt);
 
   try {
     const response = await axios.post(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         contents: [
-          ...conversationContext,
+          {
+            role: 'user',
+            parts: [{ text: systemPrompt }]
+          },
+          ...conversationHistory,
           {
             role: 'user',
             parts: [{ text: message }]
           }
-        ],
-        generationConfig: {
-          temperature: mode === 'red' ? 0.9 : 0.7, // Higher creativity for Phantom
-          maxOutputTokens: 1000,
-          topP: 0.95,
-          topK: 40
-        }
+        ]
       },
       {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000 // 10 second timeout
+        headers: { 'Content-Type': 'application/json' }
       }
     );
 
-    const reply = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || 'No reply generated';
-    
-    // Log successful interactions (optional - remove in production)
-    console.log(`✅ ${mode.toUpperCase()} mode response generated`);
-    
+    const reply = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || 'No reply';
     res.json({ reply });
-    
   } catch (err) {
-    console.error('❌ Gemini API Error:', {
-      status: err.response?.status,
-      statusText: err.response?.statusText,
-      data: err.response?.data,
-      message: err.message
-    });
-
-    // More specific error handling
-    if (err.response?.status === 429) {
-      res.status(429).json({ 
-        reply: 'API rate limit exceeded. Please try again in a moment.' 
-      });
-    } else if (err.code === 'ECONNABORTED') {
-      res.status(408).json({ 
-        reply: 'Request timeout. Please try again.' 
-      });
-    } else {
-      res.status(500).json({ 
-        reply: 'Failed to get response from AI service. Please try again.' 
-      });
-    }
+    console.error('❌ Gemini API Error:', err.response?.data || err.message);
+    res.status(500).json({ reply: 'Failed to get response from Gemini API.' });
   }
 });
 
@@ -193,22 +143,10 @@ app.post('/api/chat', async (req, res) => {
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'healthy', 
-    timestamp: new Date().toISOString(),
-    modes: ['blue', 'red']
+    timestamp: new Date().toISOString() 
   });
 });
 
-// Handle 404s
-app.use('*', (req, res) => {
-  res.status(404).json({ 
-    error: 'Endpoint not found',
-    availableEndpoints: ['/api/chat', '/health']
-  });
-});
-
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`✅ Enhanced Cipher & Phantom server running on port ${PORT}`);
-  console.log(`🔹 Blue Mode: Professional AI Assistant (Cipher)`);
-  console.log(`🔺 Red Mode: Sarcastic AI Roaster (Phantom)`);
+app.listen(3001, () => {
+  console.log('✅ Server running on http://localhost:3001');
 });
